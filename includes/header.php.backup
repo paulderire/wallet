@@ -1,0 +1,336 @@
+<?php
+// Common header include - outputs the document head and top navigation
+// Start output buffering so pages can still send header() redirects after including this file
+if (session_status() === PHP_SESSION_NONE) session_start();
+if (!ob_get_level()) ob_start();
+
+$npath = __DIR__ . '/../assets/data/notifications.json';
+$mpath = __DIR__ . '/../assets/data/messages.json';
+$notifCount = 0; $msgCount = 0;
+// load counts (best effort)
+try {
+  if (file_exists($npath)) {
+    $n = json_decode(file_get_contents($npath), true) ?: [];
+    foreach ($n as $it) { if (empty($it['is_read'])) $notifCount++; }
+  }
+  if (file_exists($mpath)) {
+    $m = json_decode(file_get_contents($mpath), true) ?: [];
+    foreach ($m as $it) { if (empty($it['is_read'])) $msgCount++; }
+  }
+} catch (Exception $e) { $notifCount = $msgCount = 0; }
+
+// determine user profile info early so header can render cleanly
+$profileName = 'Guest';
+$avatarUrl = '';
+if (!empty($_SESSION['user_id'])) {
+    try {
+        $dbPath = __DIR__ . '/db.php';
+        if (file_exists($dbPath)) include_once $dbPath; // provides $conn
+        if (!empty($conn)) {
+            $uStmt = $conn->prepare('SELECT name, avatar FROM users WHERE id = ?');
+            $uStmt->execute([$_SESSION['user_id']]);
+            $uRow = $uStmt->fetch(PDO::FETCH_ASSOC);
+            if ($uRow) {
+                $profileName = $uRow['name'] ?? $profileName;
+                $avatarUrl = $uRow['avatar'] ?? '';
+            }
+        }
+    } catch (Exception $e) { /* ignore DB errors in header */ }
+}
+// fallback: if no avatar in DB, try JSON map
+if (empty($avatarUrl) && !empty($_SESSION['user_id'])) {
+  try {
+    $mapPath = __DIR__ . '/../assets/data/user_avatars.json';
+    if (file_exists($mapPath)) {
+      $map = json_decode(file_get_contents($mapPath), true) ?: [];
+      if (!empty($map[strval($_SESSION['user_id'])])) $avatarUrl = $map[strval($_SESSION['user_id'])];
+    }
+  } catch (Exception $e) { }
+}
+
+// compute unread counts for notifications and messages (file-based)
+$notifCount = 0; $msgCount = 0;
+try {
+  $npath = __DIR__ . '/../assets/data/notifications.json';
+  if (file_exists($npath)) {
+    $ndata = json_decode(file_get_contents($npath), true) ?: [];
+    foreach ($ndata as $ni) { if (empty($ni['is_read'])) $notifCount++; }
+  }
+} catch (Exception $e) { $notifCount = 0; }
+try {
+  $mpath = __DIR__ . '/../assets/data/messages.json';
+  if (file_exists($mpath)) {
+    $mdata = json_decode(file_get_contents($mpath), true) ?: [];
+    foreach ($mdata as $mi) { if (empty($mi['is_read'])) $msgCount++; }
+  }
+} catch (Exception $e) { $msgCount = 0; }
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Wallet App</title>
+  <!-- Inter font for a modern UI -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/MY%20CASH/assets/css/style.css">
+  <style>/* small inline helpers for demo */
+    .mobile-sidebar-open{position:fixed;inset:0;background:var(--modal-backdrop);z-index:40}
+  </style>
+  </head>
+  <?php
+  // If user is logged in we show the header; otherwise hide header/sidebar
+  $bodyClasses = [];
+  if (!empty($_SESSION['user_id'])) $bodyClasses[] = 'has-header';
+  else { $bodyClasses[] = 'no-header'; $bodyClasses[] = 'no-sidebar'; }
+  ?>
+  <body class="<?php echo implode(' ', $bodyClasses); ?>">
+
+  <?php if (!empty($_SESSION['user_id'])): ?>
+  <header class="site-header">
+    <div class="container">
+      <div style="display:flex;align-items:center;gap:10px">
+        <button id="menu-toggle" class="menu-toggle" aria-label="Toggle menu" aria-expanded="false">☰</button>
+  <a class="brand" href="/MY%20CASH/index.php" style="display:flex;align-items:center;gap:10px;margin-right:8px;">
+          <span style="font-weight:800;color:var(--card-text);">Wallet</span>
+        </a>
+      </div>
+
+      <div class="header-search">
+        <input id="header-search-input" placeholder="Search transactions, accounts, people...">
+        <button class="icon-button" aria-label="Search" type="button">🔍</button>
+        <div class="search-suggestions" id="search-suggestions"></div>
+      </div>
+
+        <div class="header-actions">
+        
+        <!-- Currency switcher: toggles between USD and RWF and converts amounts on the page -->
+        <div style="position:relative;display:inline-block;margin-left:8px">
+          <button id="currency-switcher" class="icon-button" title="Switch currency">USD ↔ RWF</button>
+          <div id="currency-panel" class="dropdown-panel" style="min-width:220px;padding:12px;display:none">
+            <div style="margin-bottom:8px"><strong>Convert amounts on page</strong></div>
+            <label style="display:block;margin-bottom:6px">Target currency</label>
+            <select id="currency-target"><option value="USD">USD</option><option value="RWF">RWF</option></select>
+            <div style="margin-top:8px"><button id="currency-convert-visible" class="button">Convert visible amounts</button></div>
+            <hr style="margin:8px 0;border:none;border-top:1px solid var(--border-weak)">
+            <div style="font-size:13px">Quick convert</div>
+            <input id="currency-quick-amount" placeholder="Amount" style="width:100%;margin-top:6px;padding:6px">
+            <div style="margin-top:8px"><button id="currency-quick-convert" class="button">Convert</button></div>
+            <div id="currency-quick-result" style="margin-top:8px;color:var(--muted-color)"></div>
+          </div>
+        </div>
+        <div style="position:relative">
+          <button type="button" class="icon-button" id="notif-btn" aria-label="Notifications">🔔<?php if (!empty($notifCount)): ?><span class="icon-badge"><?php echo intval($notifCount); ?></span><?php endif; ?></button>
+          <div class="dropdown-panel" id="notif-panel">
+            <?php
+              // prepare small preview: show up to 3 items, unread first
+              $preview = [];
+              try {
+                if (file_exists($npath)) {
+                  $ndata = json_decode(file_get_contents($npath), true) ?: [];
+                  $unread = array_values(array_filter($ndata, function($i){ return empty($i['is_read']); }));
+                  $read = array_values(array_filter($ndata, function($i){ return !empty($i['is_read']); }));
+                  $slice = array_slice(array_reverse($unread), 0, 3);
+                  if (count($slice) < 3) {
+                    $more = array_slice(array_reverse($read), 0, 3 - count($slice));
+                    $slice = array_merge($slice, $more);
+                  }
+                  $preview = $slice;
+                }
+              } catch (Exception $e) { $preview = []; }
+            ?>
+            <?php if (empty($preview)): ?>
+              <div class="muted small" style="padding:8px">No recent notifications</div>
+            <?php else: ?>
+              <ul style="list-style:none;padding:8px;margin:0;"> 
+                <?php foreach($preview as $p): ?>
+                  <li style="padding:6px;border-bottom:1px solid var(--border-weak);cursor:pointer" data-id="<?=htmlspecialchars($p['id'] ?? '')?>" data-read="<?=empty($p['is_read'])?0:1?>">
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                      <div style="display:flex;gap:8px;align-items:center">
+                        <span class="notification-icon">🔔</span>
+                        <div>
+                          <div style="font-weight:600"><?=htmlspecialchars($p['title'] ?? '')?></div>
+                          <div class="muted small"><?=htmlspecialchars($p['body'] ?? '')?></div>
+                        </div>
+                      </div>
+                      <div class="muted small"><?=htmlspecialchars($p['time'] ?? '')?></div>
+                    </div>
+                  </li>
+                <?php endforeach; ?>
+              </ul>
+            <?php endif; ?>
+            <hr style="border:none;border-top:1px solid var(--border-weak);margin:8px 0">
+            <a href="/MY%20CASH/pages/notifications.php">View all notifications</a>
+          </div>
+        </div>
+
+        <div style="position:relative">
+          <button type="button" class="icon-button" id="msg-btn" aria-label="Messages">✉️<?php if (!empty($msgCount)): ?><span class="icon-badge"><?php echo intval($msgCount); ?></span><?php endif; ?></button>
+          <div class="dropdown-panel" id="msg-panel">
+            <?php
+              $mpreview = [];
+              try {
+                if (file_exists($mpath)) {
+                  $mdata = json_decode(file_get_contents($mpath), true) ?: [];
+                  $munread = array_values(array_filter($mdata, function($i){ return empty($i['is_read']); }));
+                  $mread = array_values(array_filter($mdata, function($i){ return !empty($i['is_read']); }));
+                  $mslice = array_slice(array_reverse($munread), 0, 3);
+                  if (count($mslice) < 3) {
+                    $morem = array_slice(array_reverse($mread), 0, 3 - count($mslice));
+                    $mslice = array_merge($mslice, $morem);
+                  }
+                  $mpreview = $mslice;
+                }
+              } catch (Exception $e) { $mpreview = []; }
+            ?>
+            <?php if (empty($mpreview)): ?>
+              <div class="muted small" style="padding:8px">No recent messages</div>
+            <?php else: ?>
+              <ul style="list-style:none;padding:8px;margin:0;"> 
+                <?php foreach($mpreview as $pm): ?>
+                  <li style="padding:6px;border-bottom:1px solid var(--border-weak);cursor:pointer" data-id="<?=htmlspecialchars($pm['id'] ?? '')?>" data-read="<?=empty($pm['is_read'])?0:1?>">
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                      <div style="display:flex;gap:8px;align-items:center">
+                        <span class="message-icon">✉️</span>
+                        <div>
+                          <div style="font-weight:600"><?=htmlspecialchars($pm['subject'] ?? '')?></div>
+                          <div class="muted small"><?=htmlspecialchars($pm['preview'] ?? '')?></div>
+                        </div>
+                      </div>
+                      <div class="muted small"><?=htmlspecialchars($pm['time'] ?? '')?></div>
+                    </div>
+                  </li>
+                <?php endforeach; ?>
+              </ul>
+            <?php endif; ?>
+            <hr style="border:none;border-top:1px solid var(--border-weak);margin:8px 0">
+            <a href="/MY%20CASH/pages/messages.php">View all messages</a>
+          </div>
+        </div>
+
+        <div style="position:relative">
+          <button type="button" class="icon-button" id="profile-btn" aria-label="Profile">
+            <span class="avatar">
+              <?php if ($avatarUrl): ?>
+                <img src="<?php echo htmlspecialchars($avatarUrl); ?>" alt="avatar">
+              <?php else: ?>
+                <span style="display:inline-block;width:100%;height:100%;background:linear-gradient(90deg,var(--accent-500),var(--accent-400));color:var(--button-text);display:flex;align-items:center;justify-content:center;font-weight:700"><?php echo htmlspecialchars(strtoupper(substr($profileName,0,1))); ?></span>
+              <?php endif; ?>
+            </span>
+            <span class="profile-name"><?php echo htmlspecialchars($profileName); ?></span>
+          </button>
+          <div class="dropdown-panel" id="profile-panel">
+            <a href="/MY%20CASH/pages/profile.php">View profile</a>
+            <a href="/MY%20CASH/pages/settings.php">Settings</a>
+            <a href="/MY%20CASH/pages/logout.php">Logout</a>
+          </div>
+  </div>
+      </div>
+      <!-- Theme toggle moved to the far right for easier access -->
+      <div style="margin-left:auto">
+        <button id="theme-toggle" class="icon-button" title="Toggle theme">🌓</button>
+      </div>
+    </div>
+  </header>
+  <?php endif; ?>
+
+  <script>
+    // Header live search: suggestions and navigation
+    (function(){
+      var input = document.getElementById('header-search-input');
+      var btn = document.querySelector('.header-search .icon-button');
+      var sug = document.getElementById('search-suggestions');
+      var timer = null;
+      function render(items){
+        sug.innerHTML = '';
+        if (!items || !items.length) { sug.style.display = 'none'; return; }
+        items.forEach(function(it){
+          var a = document.createElement('a');
+          a.className = 'search-suggestion-item';
+          var text = (it.type || '') + ' — ' + (it.title || '');
+          a.textContent = text;
+          a.href = it.url || ('/MY%20CASH/pages/search.php?q='+encodeURIComponent(input.value));
+          sug.appendChild(a);
+        });
+        sug.style.display = 'block';
+      }
+      function fetchSuggestions(q){
+        if (!q) { render([]); return; }
+  fetch('/MY%20CASH/pages/search.php?ajax=1&q='+encodeURIComponent(q), {cache:'no-store'}).then(function(r){ return r.json(); }).then(function(j){ render(j || []); }).catch(function(){ render([]); });
+      }
+      input.addEventListener('input', function(){ clearTimeout(timer); timer = setTimeout(function(){ fetchSuggestions(input.value.trim()); }, 250); });
+  input.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ window.location = '/MY%20CASH/pages/search.php?q='+encodeURIComponent(input.value.trim()); } });
+  if (btn) btn.addEventListener('click', function(){ window.location = '/MY%20CASH/pages/search.php?q='+encodeURIComponent(input.value.trim()); });
+      document.addEventListener('click', function(e){ if (!sug.contains(e.target) && e.target !== input) sug.style.display = 'none'; });
+    })();
+    // Header notification interactions: toggle dropdown and mark preview items read
+    (function(){
+      var notifBtn = document.getElementById('notif-btn');
+      var notifPanel = document.getElementById('notif-panel');
+      var msgBtn = document.getElementById('msg-btn');
+      var msgPanel = document.getElementById('msg-panel');
+      // notification handlers
+      if (notifBtn && notifPanel) {
+        notifBtn.addEventListener('click', function(e){ e.stopPropagation(); notifPanel.style.display = notifPanel.style.display === 'block' ? 'none' : 'block'; });
+        document.addEventListener('click', function(){ if (notifPanel) notifPanel.style.display = 'none'; });
+        notifPanel.querySelectorAll('li[data-id]').forEach(function(li){
+          li.addEventListener('click', function(ev){
+            ev.stopPropagation();
+            var id = li.getAttribute('data-id');
+            var isRead = li.getAttribute('data-read') === '1';
+            if (!id || isRead) return;
+            fetch('/MY%20CASH/pages/mark_notification_read.php', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:'id='+encodeURIComponent(id)}).then(function(resp){ return resp.json(); }).then(function(j){
+              if (j && j.ok) {
+                var b = notifBtn.querySelector('.icon-badge');
+                if (b) { var v = parseInt(b.textContent||'0') - 1; if (v<=0){ b.parentNode.removeChild(b); } else b.textContent = v; }
+                li.setAttribute('data-read','1'); li.style.opacity = 0.6;
+              }
+            }).catch(function(){});
+          });
+        });
+      }
+      // message handlers
+      if (msgBtn && msgPanel) {
+        msgBtn.addEventListener('click', function(e){ e.stopPropagation(); msgPanel.style.display = msgPanel.style.display === 'block' ? 'none' : 'block'; });
+        document.addEventListener('click', function(){ if (msgPanel) msgPanel.style.display = 'none'; });
+        msgPanel.querySelectorAll('li[data-id]').forEach(function(li){
+          li.addEventListener('click', function(ev){
+            ev.stopPropagation();
+            var id = li.getAttribute('data-id');
+            var isRead = li.getAttribute('data-read') === '1';
+            if (!id || isRead) return;
+            fetch('/MY%20CASH/pages/mark_message_read.php', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:'id='+encodeURIComponent(id)}).then(function(resp){ return resp.json(); }).then(function(j){
+              if (j && j.ok) {
+                var b = msgBtn.querySelector('.icon-badge');
+                if (b) { var v = parseInt(b.textContent||'0') - 1; if (v<=0){ b.parentNode.removeChild(b); } else b.textContent = v; }
+                li.setAttribute('data-read','1'); li.style.opacity = 0.6;
+              }
+            }).catch(function(){});
+          });
+        });
+      }
+    })();
+  </script>
+
+  <div class="app">
+    <?php if(!empty($_SESSION['user_id'])): ?>
+    <aside class="sidebar" id="app-sidebar">
+      <nav class="sidebar-nav">
+    <a href="/MY%20CASH/pages/dashboard.php"><span class="icon">📊</span><span>Dashboard</span></a>
+    <a href="/MY%20CASH/pages/reports.php"><span class="icon">📈</span><span>Reports</span></a>
+    <a href="/MY%20CASH/pages/ai.php"><span class="icon">🤖</span><span>AI</span></a>
+  <a href="/MY%20CASH/pages/budgets.php"><span class="icon">💼</span><span>Budgets</span></a>
+  <a href="/MY%20CASH/pages/accounts.php"><span class="icon">🏦</span><span>Accounts</span></a>
+  <a href="/MY%20CASH/pages/loans.php"><span class="icon">💳</span><span>Loans</span></a>
+  <a href="/MY%20CASH/pages/goals.php"><span class="icon">🎯</span><span>Goals</span></a>
+      </nav>
+      <div class="sidebar-logout">
+  <a href="/MY%20CASH/pages/logout.php"><span class="icon">🔓</span><span>Logout</span></a>
+      </div>
+    </aside>
+    <?php endif; ?>
+
+    <div>
+      <main class="container" role="main" id="app-main">

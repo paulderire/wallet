@@ -1,0 +1,17 @@
+#cloud-config
+# Example cloud-init for Oracle Cloud Always Free instance (Ubuntu 22.04)
+package_update: true
+packages:
+  - apache2
+  - mariadb-server
+  - php8.2
+  - php8.2-cli
+  - php8.2-fpm
+  - php8.2-mysql
+  - libapache2-mod-php8.2
+  - certbot
+  - python3-certbot-apache
+  - git
+runcmd:
+  - [ bash, -lc, 'curl -fsSL https://raw.githubusercontent.com/your-repo-path/scripts/bootstrap_mycash.sh -o /tmp/bootstrap_mycash.sh' ]
+  - [ bash, -lc, 'chmod +x /tmp/bootstrap_mycash.sh && /tmp/bootstrap_mycash.sh' ]

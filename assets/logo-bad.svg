@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="40" viewBox="0 0 160 40">
+  <rect width="160" height="40" fill="#ff00ff"/>
+  <circle cx="20" cy="20" r="14" fill="#00ff00"/>
+  <rect x="40" y="6" width="22" height="28" fill="#ffff00" transform="rotate(15 51 20)"/>
+  <text x="74" y="26" font-family="Arial, Helvetica, sans-serif" font-size="16" fill="#000000" style="font-weight:800;letter-spacing:2px">MYCASH!!!</text>
+  <text x="74" y="38" font-family="Courier New, monospace" font-size="8" fill="#ff0000">(this logo is bad)</text>
+</svg>

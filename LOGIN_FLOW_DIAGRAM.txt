@@ -1,0 +1,171 @@
+┌─────────────────────────────────────────────────────────────────┐
+│                     MY CASH UNIFIED LOGIN FLOW                  │
+└─────────────────────────────────────────────────────────────────┘
+
+                         START: index.php
+                               │
+                               │
+                    ┌──────────▼──────────┐
+                    │  Already logged in? │
+                    └──────────┬──────────┘
+                               │
+                ┌──────────────┼──────────────┐
+                │              │              │
+         ┌──────▼─────┐  ┌────▼────┐  ┌─────▼──────┐
+         │ user_id    │  │  NO     │  │employee_id │
+         │ exists?    │  │ session │  │  exists?   │
+         └──────┬─────┘  └────┬────┘  └─────┬──────┘
+                │             │              │
+         ┌──────▼──────┐      │       ┌──────▼─────────┐
+         │ Redirect to │      │       │  Redirect to   │
+         │  pages/     │      │       │  employee/     │
+         │ dashboard   │      │       │  dashboard     │
+         └─────────────┘      │       └────────────────┘
+                              │
+                    ┌─────────▼──────────┐
+                    │ Show landing page  │
+                    │ with "Sign In"     │
+                    │ button             │
+                    └─────────┬──────────┘
+                              │
+                    ┌─────────▼──────────┐
+                    │ User clicks        │
+                    │ "Sign In"          │
+                    └─────────┬──────────┘
+                              │
+                    ┌─────────▼──────────┐
+                    │ Login modal opens  │
+                    │ (with animation)   │
+                    └─────────┬──────────┘
+                              │
+                    ┌─────────▼──────────┐
+                    │ User enters email  │
+                    │ and password       │
+                    └─────────┬──────────┘
+                              │
+                    ┌─────────▼──────────┐
+                    │ Form submitted     │
+                    │ POST to index.php  │
+                    └─────────┬──────────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        │                     │                     │
+┌───────▼────────┐  ┌─────────▼─────────┐  ┌──────▼────────┐
+│ Query users    │  │ User found in     │  │ Query         │
+│ table by email │  │ users table?      │  │ employees     │
+└───────┬────────┘  └─────────┬─────────┘  │ table         │
+        │                     │             └──────┬────────┘
+        │              ┌──────┴──────┐             │
+        │              │             │             │
+    ┌───▼────┐    ┌───▼───┐    ┌────▼────┐   ┌────▼─────┐
+    │ FOUND  │    │  YES  │    │   NO    │   │  FOUND   │
+    └───┬────┘    └───┬───┘    └────┬────┘   └────┬─────┘
+        │             │              │             │
+┌───────▼────────┐    │              │      ┌──────▼──────────┐
+│ Verify password│    │              │      │ Check status:   │
+│ using          │    │              │      │ - active?       │
+│ password_verify│    │              │      │ - is_active=1?  │
+└───────┬────────┘    │              │      └──────┬──────────┘
+        │             │              │             │
+    ┌───▼────┐        │              │         ┌───▼────┐
+    │ Valid? │        │              │         │ Valid? │
+    └───┬────┘        │              │         └───┬────┘
+        │             │              │             │
+   ┌────┴────┐        │              │        ┌────┴────┐
+   │   YES   │        │              │        │   YES   │
+   └────┬────┘        │              │        └────┬────┘
+        │             │              │             │
+┌───────▼─────────┐   │              │     ┌───────▼──────────┐
+│ Set session:    │   │              │     │ Verify password  │
+│ $_SESSION[      │   │              │     │ using            │
+│   'user_id'     │   │              │     │ password_verify  │
+│ ] = $user['id'] │   │              │     └───────┬──────────┘
+└───────┬─────────┘   │              │             │
+        │             │              │         ┌───▼────┐
+┌───────▼─────────┐   │              │         │ Valid? │
+│ Redirect to:    │   │              │         └───┬────┘
+│ pages/          │   │              │             │
+│ dashboard.php   │   │              │        ┌────┴────┐
+└─────────────────┘   │              │        │   YES   │
+                      │              │        └────┬────┘
+                      │              │             │
+                      │              │     ┌───────▼──────────┐
+                      │              │     │ Set sessions:    │
+                      │              │     │ - employee_id    │
+                      │              │     │ - employee_name  │
+                      │              │     │ - employee_email │
+                      │              │     │ - employee_role  │
+                      │              │     │ - employee_user_id│
+                      │              │     │ - employee_company│
+                      │              │     └───────┬──────────┘
+                      │              │             │
+                      │              │     ┌───────▼──────────┐
+                      │              │     │ Update last_login│
+                      │              │     │ timestamp        │
+                      │              │     └───────┬──────────┘
+                      │              │             │
+                      │              │     ┌───────▼──────────┐
+                      │              │     │ Redirect to:     │
+                      │              │     │ employee/        │
+                      │              │     │ dashboard.php    │
+                      │              │     └──────────────────┘
+                      │              │
+                      └──────────────┴────────────┐
+                                                  │
+                                         ┌────────▼─────────┐
+                                         │ No valid login   │
+                                         │ found            │
+                                         └────────┬─────────┘
+                                                  │
+                                         ┌────────▼─────────┐
+                                         │ Show error:      │
+                                         │ "Invalid         │
+                                         │ credentials or   │
+                                         │ account not      │
+                                         │ active"          │
+                                         └────────┬─────────┘
+                                                  │
+                                         ┌────────▼─────────┐
+                                         │ Modal stays open │
+                                         │ User can retry   │
+                                         └──────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────┐
+│                          KEY POINTS                             │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ✓ Single entry point for ALL users                           │
+│  ✓ Automatic user type detection                              │
+│  ✓ Users table checked FIRST                                  │
+│  ✓ Employees table checked SECOND (if user not found)         │
+│  ✓ Different session variables for each type                  │
+│  ✓ Different redirect destinations                            │
+│  ✓ Password verification using bcrypt                         │
+│  ✓ Employee must be active AND have is_active = 1             │
+│  ✓ Last login tracking for employees                          │
+│  ✓ Beautiful modal interface with error handling              │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────┐
+│                      SESSION VARIABLES                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ADMIN/USER LOGIN:                                             │
+│  ┌──────────────────────────────────────────────────────┐     │
+│  │  $_SESSION['user_id'] = $user['id']                  │     │
+│  └──────────────────────────────────────────────────────┘     │
+│                                                                 │
+│  EMPLOYEE LOGIN:                                               │
+│  ┌──────────────────────────────────────────────────────┐     │
+│  │  $_SESSION['employee_id']      = $employee['id']     │     │
+│  │  $_SESSION['employee_name']    = $employee['name']   │     │
+│  │  $_SESSION['employee_email']   = $employee['email']  │     │
+│  │  $_SESSION['employee_role']    = $employee['role']   │     │
+│  │  $_SESSION['employee_user_id'] = $employee['user_id']│     │
+│  │  $_SESSION['employee_company'] = $company_name       │     │
+│  └──────────────────────────────────────────────────────┘     │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
